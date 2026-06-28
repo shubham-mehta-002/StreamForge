@@ -1,0 +1,56 @@
+spring.application.name=streamforge
+
+
+# SERVER
+server.port=8080
+
+
+# MYSQL
+spring.datasource.url=jdbc:mysql://streamforge-db.cp8y0oowmnqb.ap-south-1.rds.amazonaws.com:3306/streamforge
+spring.datasource.username=admin
+spring.datasource.password=<password>
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+
+
+# KAFKA
+#spring.kafka.bootstrap-servers=localhost:9092
+#spring.kafka.consumer.auto-offset-reset=earliest
+#spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+#spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer
+#spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
+#spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer
+#spring.kafka.consumer.properties.spring.json.trusted.packages=*
+#spring.kafka.consumer.properties.max.poll.interval.ms=1800000
+
+## REDIS
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+spring.cache.type=redis
+redis-ttl=60
+
+#REDIS (upstash)
+# spring.data.redis.host=cheerful-louse-80119.upstash.io
+# spring.data.redis.port=6379
+# spring.data.redis.username=default
+# spring.data.redis.password=<Password>
+# spring.data.redis.ssl.enabled=true
+# spring.cache.type=redis
+# redis-ttl=60
+
+
+# AWS S3
+aws.bucket-name=streamforge-videos
+aws.region=eu-north-1
+aws.access-key=YOUR_ACCESS_KEY
+aws.secret-key=YOUR_SECRET_KEY
+aws.presigned-hls-playlist-url-expiry=10
+aws.lambda-webhook-secret=YOUR_SECRET
+
+
+# FFmpeg
+ffmpeg.path=C:/Users/Shubham/ffmpeg/bin/ffmpeg.exe
+ffprobe.path=C:/Users/Shubham/ffmpeg/bin/ffprobe.exe
+encoding.temp-dir=C:/Users/Shubham/Desktop/temp
+
+
