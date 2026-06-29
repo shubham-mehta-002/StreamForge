@@ -38,7 +38,7 @@ export function VideoGallery() {
       {videos.map((video) => (
         <Card key={video.videoId} className="overflow-hidden group hover:shadow-xl transition-all duration-300 border-border/50">
           <div className="w-full bg-black">
-             <VideoPlayer url={video.streamingUrl} />
+            <VideoPlayer url={video.streamingUrl} poster={video.thumbnailUrl} />
           </div>
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center gap-2">
