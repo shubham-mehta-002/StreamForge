@@ -31,13 +31,18 @@ public class StreamingServiceImpl implements StreamingService {
     public StreamingResponse getStreamingUrl(String videoId){
         String key = CACHE_KEY + videoId;
 
-        // 1. Check if redis has this url stored
+        // 1. Check Redis first — cache-aside pattern.
+        // TTL is 1 hour (redis-ttl=3600 in application.properties).
+        // HLS master URL never changes once a video is READY, so a long TTL
+        // is safe and eliminates repeated DB hits on the hot streaming path.
         String cachedUrl = (String) redisTemplate.opsForValue().get(key);
         if (cachedUrl != null) {
+            log.debug("Cache HIT for videoId={}", videoId);
             return new StreamingResponse(videoId, cachedUrl);
         }
 
-        // 2. if not cached -> fetch from DB + cache it + send response
+        // 2. Cache miss — fetch from DB, write to Redis, return response
+        log.debug("Cache MISS for videoId={} — fetching from DB", videoId);
         Video video = videoService.getVideoById(videoId);
 
         if(video.getStatus() != VideoStatus.READY){
