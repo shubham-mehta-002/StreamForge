@@ -42,6 +42,23 @@ public class S3ServiceImpl implements S3Service {
         uploadRecursive(rootDir, rootDir, prefix);
     }
 
+    /**
+     * Uploads a single file to S3 at the given key with the given content type.
+     * Used for one-off uploads like thumbnails where a full directory walk is not needed.
+     */
+    @Override
+    public void uploadFile(File file, String s3Key, String contentType) {
+        s3Client.putObject(
+                PutObjectRequest.builder()
+                        .bucket(bucketName)
+                        .key(s3Key)
+                        .contentType(contentType)
+                        .build(),
+                RequestBody.fromFile(file)
+        );
+        log.info("Uploaded single file to S3: {}", s3Key);
+    }
+
     private void uploadRecursive(File root, File file, String prefix) {
 
         if (file.isDirectory()) {

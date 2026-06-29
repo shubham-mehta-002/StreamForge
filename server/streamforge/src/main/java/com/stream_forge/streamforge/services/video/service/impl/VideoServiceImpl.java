@@ -202,7 +202,8 @@ public class VideoServiceImpl implements VideoService {
                 .map(video -> new VideoSummaryResponse(
                         video.getId(),
                         video.getOriginalFileName(),
-                        video.getHlsMasterUrl()
+                        video.getHlsMasterUrl(),
+                        video.getThumbnailUrl()   // may be null if thumbnail generation failed
                 ))
                 .toList();
     }

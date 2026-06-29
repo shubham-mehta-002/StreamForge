@@ -110,10 +110,14 @@ public class EncodingServiceImpl implements EncodingService {
             String hlsUrl = "https://" + bucketName + ".s3." + awsRegion + ".amazonaws.com/" + masterPlaylistKey;
             log.info("HLS : {}",hlsUrl);
 
-            // update the video object -> metadata, hls, S3 key, etc...
+            // 6. Generate thumbnail — non-fatal: if this fails the video still goes READY
+            String thumbnailUrl = generateAndUploadThumbnail(videoId, ctx, meta.duration());
+
+            // 7. Update the video record with all metadata, HLS URL, thumbnail, and READY status
             VideoUpdateRequest request = VideoUpdateRequest.builder()
                     .status(VideoStatus.READY)
                     .hlsMasterUrl(hlsUrl)
+                    .thumbnailUrl(thumbnailUrl)   // null if thumbnail generation failed — that's fine
                     .width(meta.width())
                     .height(meta.height())
                     .originalFileName(meta.originalFileName())
@@ -140,6 +144,49 @@ public class EncodingServiceImpl implements EncodingService {
         }
     }
 
+
+    /**
+     * Generates a JPEG thumbnail from the raw video and uploads it to S3.
+     *
+     * The frame is extracted at 10% of the video duration — this reliably
+     * avoids black/empty frames that often appear at the very beginning,
+     * while still representing an early, meaningful scene.
+     *
+     * This method is intentionally non-fatal: any exception is caught and
+     * logged as a warning so the encoding pipeline continues and the video
+     * is still marked READY even if thumbnail generation fails.
+     *
+     * @param videoId   the video UUID (used to build the S3 key)
+     * @param ctx       the job context holding temp file paths
+     * @param duration  the video duration in seconds (used to calculate seek time)
+     * @return          the public S3 URL of the uploaded thumbnail,
+     *                  or null if generation failed
+     */
+    private String generateAndUploadThumbnail(String videoId, VideoJobContext ctx, long duration) {
+        try {
+            // Seek to 10% into the video — avoids black frames at the start
+            long seekSeconds = Math.max(1, duration / 10);
+
+            Path thumbnailPath = ctx.jobDir().resolve("thumbnail.jpg");
+
+            ffmpeg.generateThumbnail(ctx.inputFile(), thumbnailPath, seekSeconds);
+            log.info("Thumbnail extracted at {}s for videoId={}", seekSeconds, videoId);
+
+            String s3Key = "thumbnails/" + videoId + "/thumbnail.jpg";
+            s3.uploadFile(thumbnailPath.toFile(), s3Key, "image/jpeg");
+
+            String thumbnailUrl = "https://" + bucketName + ".s3." + awsRegion + ".amazonaws.com/" + s3Key;
+            log.info("Thumbnail uploaded: {}", thumbnailUrl);
+
+            return thumbnailUrl;
+
+        } catch (Exception e) {
+            // Non-fatal — log and return null so the video still reaches READY status
+            log.warn("Thumbnail generation failed for videoId={} — video will still be marked READY. Reason: {}",
+                    videoId, e.getMessage());
+            return null;
+        }
+    }
 
     private void generateMasterPlaylist(Path masterPath) throws Exception {
 
