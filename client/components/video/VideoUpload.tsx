@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { UploadStatus } from './UploadStatus';
 import { useVideoUpload } from '@/hooks/useVideoUpload';
+import { validateVideoFile } from '@/lib/validateVideoFile';
 
 export function VideoUpload() {
   const [file, setFile] = useState<File | null>(null);
@@ -24,16 +25,20 @@ export function VideoUpload() {
   } = useVideoUpload();
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    // Ignore new file drops while an upload is in progress
     if (isUploading) return;
 
-    const videoFile = acceptedFiles.find(f => f.type.startsWith('video/'));
-    if (videoFile) {
-      setFile(videoFile);
-      setError(null);
-    } else {
-      setError('Please select a valid video file.');
+    const videoFile = acceptedFiles[0];
+    if (!videoFile) return;
+
+    // Validate size and MIME type before touching the API
+    const validation = validateVideoFile(videoFile);
+    if (!validation.valid) {
+      setError(validation.error!);
+      return;
     }
+
+    setFile(videoFile);
+    setError(null);
   }, [isUploading, setError]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
