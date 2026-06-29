@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { api } from '@/lib/axios';
 import { Video, VideoStatus, VideoStream } from '@/types/video';
 import {
   MultipartInitRequest,
@@ -6,12 +7,11 @@ import {
   PartDetail,
 } from '@/types/multipart';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080/api';
-
-/** Shared headers added to every backend request. */
-const backendHeaders = {
-  'ngrok-skip-browser-warning': 'true',
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// All backend calls use the shared `api` instance from lib/axios.ts.
+// Direct S3 calls (PUT to presigned URLs) use plain `axios` — they go to S3,
+// not the backend, and must not carry backend-specific headers.
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Legacy single-part upload (kept for reference / small file testing)
@@ -23,11 +23,7 @@ const backendHeaders = {
  */
 export const getPresignedUrl = async (fileName: string, contentType: string) => {
   try {
-    const response = await axios.post(
-      `${API_BASE_URL}/init-upload`,
-      { fileName, contentType },
-      { headers: backendHeaders }
-    );
+    const response = await api.post('/init-upload', { fileName, contentType });
     const { videoId, uploadUrl, s3Key } = response.data;
     return { uploadUrl, videoId, s3Key };
   } catch (error) {
@@ -38,7 +34,7 @@ export const getPresignedUrl = async (fileName: string, contentType: string) => 
 
 /**
  * Uploads an entire file to S3 in a single PUT request.
- * Reports progress via the onProgress callback.
+ * Uses plain axios — NOT the shared api instance — because this goes to S3.
  */
 export const uploadToS3 = async (
   uploadUrl: string,
@@ -79,11 +75,7 @@ export const initiateMultipartUpload = async (
   payload: MultipartInitRequest
 ): Promise<MultipartInitResponse> => {
   try {
-    const response = await axios.post(
-      `${API_BASE_URL}/multipart/initiate`,
-      payload,
-      { headers: backendHeaders }
-    );
+    const response = await api.post('/multipart/initiate', payload);
     return response.data as MultipartInitResponse;
   } catch (error) {
     console.error('Error initiating multipart upload:', error);
@@ -93,6 +85,7 @@ export const initiateMultipartUpload = async (
 
 /**
  * Uploads a single chunk (part) directly to S3 using a presigned URL.
+ * Uses plain axios — NOT the shared api instance — because this goes to S3.
  *
  * @param presignedUrl  - the URL returned by initiateMultipartUpload for this part
  * @param chunk         - the Blob/slice of the original file for this part
@@ -142,11 +135,7 @@ export const completeMultipartUpload = async (
   parts: PartDetail[]
 ): Promise<void> => {
   try {
-    await axios.post(
-      `${API_BASE_URL}/multipart/complete`,
-      { videoId, uploadId, parts },
-      { headers: backendHeaders }
-    );
+    await api.post('/multipart/complete', { videoId, uploadId, parts });
   } catch (error) {
     console.error('Error completing multipart upload:', error);
     throw new Error('Failed to complete multipart upload');
@@ -164,11 +153,7 @@ export const abortMultipartUpload = async (
   uploadId: string
 ): Promise<void> => {
   try {
-    await axios.post(
-      `${API_BASE_URL}/multipart/abort`,
-      { videoId, uploadId },
-      { headers: backendHeaders }
-    );
+    await api.post('/multipart/abort', { videoId, uploadId });
   } catch (error) {
     // Log but don't rethrow — abort is best-effort cleanup
     console.error('Error aborting multipart upload:', error);
@@ -182,9 +167,7 @@ export const abortMultipartUpload = async (
 /** Polls the current processing status of a video. */
 export const getVideoStatus = async (videoId: string): Promise<VideoStatus> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/${videoId}/status`, {
-      headers: backendHeaders,
-    });
+    const response = await api.get(`/${videoId}/status`);
     return {
       id: response.data.id || videoId,
       status: response.data.status,
@@ -198,9 +181,7 @@ export const getVideoStatus = async (videoId: string): Promise<VideoStatus> => {
 /** Fetches the HLS master playlist URL for playback (served from Redis cache). */
 export const getStreamingUrl = async (videoId: string): Promise<VideoStream> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}/${videoId}/stream`, {
-      headers: backendHeaders,
-    });
+    const response = await api.get(`/${videoId}/stream`);
     return {
       videoId: response.data.videoId || videoId,
       streamingUrl: response.data.streamingUrl,
@@ -214,7 +195,7 @@ export const getStreamingUrl = async (videoId: string): Promise<VideoStream> => 
 /** Fetches all READY videos for the gallery page. */
 export const getVideos = async (): Promise<Video[]> => {
   try {
-    const response = await axios.get(`${API_BASE_URL}`, { headers: backendHeaders });
+    const response = await api.get('/');
     return response.data || [];
   } catch (error) {
     console.error('Error fetching videos:', error);
