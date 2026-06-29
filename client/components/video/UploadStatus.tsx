@@ -14,12 +14,12 @@ interface UploadStatusProps {
 }
 
 export function UploadStatus({ videoId, onUploadAnother }: UploadStatusProps) {
-  const { 
-    status, 
-    streamUrl, 
-    isRefreshing, 
-    error, 
-    fetchStatus 
+  const {
+    status,
+    streamUrl,
+    isRefreshing,
+    error,
+    fetchStatus
   } = useVideoStatus(videoId);
 
   if (!status) {
@@ -29,7 +29,7 @@ export function UploadStatus({ videoId, onUploadAnother }: UploadStatusProps) {
       </Card>
     );
   }
-  
+
   const isReady = status === 'READY';
   const isFailed = status === 'failed' || status === 'FAILED';
   const isProcessing = !isReady && !isFailed;
@@ -45,7 +45,7 @@ export function UploadStatus({ videoId, onUploadAnother }: UploadStatusProps) {
           ) : (
             <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
           )}
-          
+
           <div>
             <h3 className="font-semibold text-xl">
               {isReady ? 'Video Ready' : isFailed ? 'Processing Failed' : 'Processing Video'}
@@ -55,16 +55,16 @@ export function UploadStatus({ videoId, onUploadAnother }: UploadStatusProps) {
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Badge variant={isReady ? "default" : isFailed ? "destructive" : "secondary"} className="capitalize px-3 py-1 text-sm">
             {status}
           </Badge>
-          
-          <Button 
-            variant="outline" 
-            size="icon" 
-            onClick={fetchStatus} 
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={fetchStatus}
             disabled={isRefreshing || isReady || isFailed}
             title="Refresh Status"
           >
@@ -82,7 +82,7 @@ export function UploadStatus({ videoId, onUploadAnother }: UploadStatusProps) {
       {isProcessing && (
         <div className="bg-secondary/30 p-6 rounded-lg text-center space-y-2">
           <p className="text-muted-foreground">Your video is currently being encoded for streaming. This may take a few minutes depending on the file size.</p>
-          <p className="text-xs text-muted-foreground mt-2">You can click refresh to check manually or we will notify you when it's done.</p>
+          <p className="text-xs text-muted-foreground mt-2">Status is checked automatically every 5 seconds. You will be notified when it's ready.</p>
         </div>
       )}
 

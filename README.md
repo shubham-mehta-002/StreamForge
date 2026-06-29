@@ -139,8 +139,11 @@ The system is designed around event-driven, asynchronous processing: an AWS Lamb
 - Drag-and-drop or click-to-select file picker
 - Accepts MP4, MOV, AVI, MKV, WebM (any `video/*` MIME type)
 - Supports files up to 2 GB
-- Real-time upload progress bar with percentage and byte counts
-- **Direct-to-S3 upload via presigned PUT URL** — the backend never proxies file bytes, keeping the server lightweight and maximizing throughput
+- **S3 Multipart Upload** — file is split into 10 MB chunks, uploaded in parallel (up to 4 concurrent parts), then assembled by S3. Dramatically faster than a single PUT for large files
+- Real-time progress bar aggregated across all in-flight parts
+- **Per-part retry** — if one chunk fails, only that chunk is re-uploaded (not the whole file)
+- **Cancel mid-upload** — aborts the S3 multipart session and cleans up all partial data to avoid storage charges
+- The backend never proxies file bytes — all data flows client → S3 directly
 
 ### Adaptive Video Encoding
 - Automatic transcoding to multiple quality tiers after upload
@@ -207,17 +210,39 @@ Server:
   • Returns: { videoId, uploadUrl, s3Key, expiresIn: 600 }
 ```
 
-### 2. Direct S3 Upload
+### 2. Direct S3 Upload (Multipart)
 
 ```
-Client receives presigned URL
+Client receives uploadId + presigned URL per part
        │
        ▼
-PUT <presignedUrl>  (body = raw file bytes)
-  • Content-Type header set to file's MIME type
-  • Axios onUploadProgress → real-time progress bar update
-  • File lands in S3: videos/<videoId>/<fileName>
-  • Server is NOT involved in this data transfer
+File is split into 10 MB chunks (Math.ceil(fileSize / 10MB) parts)
+       │
+       ▼
+Upload all parts in parallel (max 4 concurrent) directly to S3:
+  Part 1 → PUT <presignedUrl[0]>  ──┐
+  Part 2 → PUT <presignedUrl[1]>  ──┤  All direct to S3 — server not involved
+  Part 3 → PUT <presignedUrl[2]>  ──┤
+  Part 4 → PUT <presignedUrl[3]>  ──┘
+  (remaining parts queued, start as slots free up)
+       │
+       ▼
+S3 returns ETag header in each part response
+Client collects all { partNumber, etag } pairs
+       │
+       ▼
+POST /videos/multipart/complete  { videoId, uploadId, parts: [...] }
+  → Server calls S3 CompleteMultipartUpload
+  → S3 assembles all parts into the final object
+  → S3 fires ObjectCreated event → Lambda → encoding
+       │
+  [On cancel / error at any point]
+       │
+       ▼
+POST /videos/multipart/abort  { videoId, uploadId }
+  → Server calls S3 AbortMultipartUpload
+  → S3 deletes all orphaned parts (prevents storage charges)
+  → Video record marked FAILED in DB
 ```
 
 ### 3. AWS Lambda Webhook Trigger
@@ -280,7 +305,8 @@ EncodingService.encodeVideo()  [runs on async thread pool]
        │
        ├─ Updates Video record:
        │     status = READY
-       │     hlsMasterUrl = https://streamforge-videos.s3.amazonaws.com/encoded/<videoId>/master.m3u8
+       │     hlsMasterUrl = https://streamforge-app.s3.ap-south-1.amazonaws.com/encoded/<videoId>/master.m3u8
+       │                    (region-specific URL — avoids 307 redirect which strips CORS headers)
        │     width, height, duration, fileSize, processedAt
        │
        └─ On any failure:
@@ -337,9 +363,10 @@ StreamForge/
 │   │   ├── useVideoStatus.ts        # Status polling + stream URL fetch
 │   │   └── useVideos.ts             # Gallery video list fetch
 │   ├── services/
-│   │   └── api.ts                   # All Axios API calls
+│   │   └── api.ts                   # All Axios API calls (multipart + legacy)
 │   ├── types/
-│   │   └── video.ts                 # TypeScript interfaces
+│   │   ├── video.ts                 # Video, VideoStatus, VideoStream interfaces
+│   │   └── multipart.ts             # Multipart upload types (request/response/part state)
 │   └── lib/
 │       └── utils.ts                 # cn() utility
 │
@@ -370,12 +397,67 @@ StreamForge/
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/videos/init-upload` | Initialize upload — returns presigned S3 PUT URL |
+| `POST` | `/videos/init-upload` | Legacy: single presigned PUT URL (small files only) |
+| `POST` | `/videos/multipart/initiate` | Initiate multipart upload — returns uploadId + presigned URLs per part |
+| `POST` | `/videos/multipart/complete` | Assemble all uploaded parts into the final S3 object |
+| `POST` | `/videos/multipart/abort` | Cancel upload and clean up orphaned S3 parts |
 | `GET` | `/videos` | List all READY videos |
 | `GET` | `/videos/{videoId}/status` | Get current processing status |
 | `GET` | `/videos/{videoId}/stream` | Get HLS master playlist URL (Redis-cached) |
 
-**POST /videos/init-upload**
+**POST /videos/multipart/initiate**
+
+Request:
+```json
+{
+  "fileName": "my-video.mp4",
+  "contentType": "video/mp4",
+  "partCount": 50
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "videoId": "a1b2c3d4-...",
+  "uploadId": "VXBsb2FkSWQ...",
+  "s3Key": "videos/a1b2c3d4-.../my-video.mp4",
+  "presignedUrls": [
+    { "partNumber": 1, "url": "https://s3.amazonaws.com/...?partNumber=1&uploadId=...&X-Amz-..." },
+    { "partNumber": 2, "url": "https://s3.amazonaws.com/...?partNumber=2&uploadId=...&X-Amz-..." }
+  ]
+}
+```
+
+**POST /videos/multipart/complete**
+
+Request:
+```json
+{
+  "videoId": "a1b2c3d4-...",
+  "uploadId": "VXBsb2FkSWQ...",
+  "parts": [
+    { "partNumber": 1, "etag": "\"d8e8fca2dc0f896fd7cb4cb0031ba249\"" },
+    { "partNumber": 2, "etag": "\"b026324c6904b2a9cb4b88d6d61c81d1\"" }
+  ]
+}
+```
+
+Response: `200 OK` (empty body)
+
+**POST /videos/multipart/abort**
+
+Request:
+```json
+{
+  "videoId": "a1b2c3d4-...",
+  "uploadId": "VXBsb2FkSWQ..."
+}
+```
+
+Response: `200 OK` (empty body)
+
+**POST /videos/init-upload** *(legacy — small files only)*
 
 Request:
 ```json
@@ -411,7 +493,7 @@ Response `200 OK`:
 ```json
 {
   "videoId": "a1b2c3d4-...",
-  "streamingUrl": "https://streamforge-videos.s3.amazonaws.com/encoded/a1b2c3d4-.../master.m3u8"
+  "streamingUrl": "https://streamforge-app.s3.ap-south-1.amazonaws.com/encoded/a1b2c3d4-.../master.m3u8"
 }
 ```
 
@@ -423,7 +505,7 @@ Response `200 OK`:
   {
     "videoId": "a1b2c3d4-...",
     "originalFileName": "my-video.mp4",
-    "streamingUrl": "https://streamforge-videos.s3.amazonaws.com/encoded/a1b2c3d4-.../master.m3u8"
+    "streamingUrl": "https://streamforge-app.s3.ap-south-1.amazonaws.com/encoded/a1b2c3d4-.../master.m3u8"
   }
 ]
 ```
@@ -521,8 +603,8 @@ Controllers handle HTTP concerns only. Services contain business logic behind in
 **Repository Pattern**  
 `VideoRepository extends JpaRepository<Video, String>` — all database access through a single typed repository.
 
-**Presigned URL (Bypass Pattern)**  
-The backend generates a time-limited S3 presigned PUT URL and returns it to the client. The client uploads the file directly to S3 without the file bytes ever passing through the Spring server. This eliminates memory pressure, removes upload size limits from the application layer, and reduces latency.
+**S3 Multipart Upload with Presigned URLs**  
+The file is split into 10 MB chunks client-side. The backend generates one presigned `UploadPart` URL per chunk via the S3 SDK, returned in a single `initiate` response. The client uploads all chunks directly to S3 in parallel (up to 4 concurrent), collects the ETags S3 returns per part, then calls `complete` so the server instructs S3 to assemble the final object. The server never touches the file bytes. A dedicated `abort` endpoint cleans up orphaned S3 parts on cancel or error.
 
 **Event-Driven Trigger via Lambda Webhook**  
 Rather than polling S3 or making the client notify the server of upload completion, an AWS Lambda function subscribes to S3 `ObjectCreated` events and calls a secured internal webhook endpoint. This decouples the upload from processing and ensures the encoding job starts only after S3 has durably received the file.

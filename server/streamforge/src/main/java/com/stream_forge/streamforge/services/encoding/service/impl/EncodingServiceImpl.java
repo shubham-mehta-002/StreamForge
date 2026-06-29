@@ -46,6 +46,9 @@ public class EncodingServiceImpl implements EncodingService {
     @Value("${aws.bucket-name}")
     private String bucketName;
 
+    @Value("${aws.region}")
+    private String awsRegion;
+
     /**
      * 1. Download raw video from S3
      * 2. Encode to multiple qualities using FFmpeg
@@ -99,7 +102,12 @@ public class EncodingServiceImpl implements EncodingService {
             log.info("Uploaded to S3");
 
             String masterPlaylistKey = "encoded/" + videoId + "/master.m3u8";
-            String hlsUrl = "https://" + bucketName + ".s3.amazonaws.com/" + masterPlaylistKey;
+
+            // Use region-specific S3 URL to avoid a 307 redirect.
+            // The global endpoint (s3.amazonaws.com) causes a redirect to the
+            // bucket's actual region. Browsers follow this redirect WITHOUT the
+            // Origin header, so S3 never returns Access-Control-Allow-Origin → CORS fails.
+            String hlsUrl = "https://" + bucketName + ".s3." + awsRegion + ".amazonaws.com/" + masterPlaylistKey;
             log.info("HLS : {}",hlsUrl);
 
             // update the video object -> metadata, hls, S3 key, etc...

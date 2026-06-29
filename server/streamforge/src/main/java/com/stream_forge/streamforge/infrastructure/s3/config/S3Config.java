@@ -11,6 +11,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 @Configuration
 public class S3Config {
+
     @Value("${aws.secret-key}")
     private String secretKey;
 
@@ -20,22 +21,34 @@ public class S3Config {
     @Value("${aws.region}")
     private String region;
 
+    /**
+     * S3Client used for API operations: CreateMultipartUpload,
+     * CompleteMultipartUpload, AbortMultipartUpload, GetObject, PutObject.
+     *
+     * The region here must exactly match the bucket's actual region.
+     * A mismatch causes a 307 redirect to the correct region — the browser
+     * follows this redirect but loses CORS response headers, breaking playback.
+     */
     @Bean
-    public S3Client s3Client(){
+    public S3Client s3Client() {
         return S3Client.builder()
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey,secretKey)
+                        AwsBasicCredentials.create(accessKey, secretKey)
                 ))
                 .build();
     }
 
+    /**
+     * S3Presigner used to generate presigned PUT URLs for direct client uploads
+     * and presigned UploadPart URLs for multipart uploads.
+     */
     @Bean
-    public S3Presigner s3Presigner(){
+    public S3Presigner s3Presigner() {
         return S3Presigner.builder()
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey,secretKey)
+                        AwsBasicCredentials.create(accessKey, secretKey)
                 ))
                 .build();
     }
