@@ -158,7 +158,6 @@ npm run dev                   # app at http://localhost:3000
 
 ## Roadmap
 
-- [ ] Kafka event streaming (topics + events already scaffolded)
 - [ ] Authentication (userId field already on Video entity)
 - [ ] Sprite sheet generation for seek preview
 - [ ] Real-time status via WebSocket/SSE (directory already exists)
