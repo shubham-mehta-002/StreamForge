@@ -1,4 +1,4 @@
-package com.stream_forge.streamforge.services.encoding.service;
+package com.stream_forge.streamforge.infrastructure.s3.service;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -17,7 +17,6 @@ public interface S3Service {
 
     /**
      * Uploads a single local file to S3 at the given key with the given MIME type.
-     * Used for individual file uploads such as thumbnails.
      *
      * @param file        the local file to upload
      * @param s3Key       the destination S3 object key

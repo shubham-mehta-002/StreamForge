@@ -1,6 +1,6 @@
-package com.stream_forge.streamforge.services.encoding.service.impl;
+package com.stream_forge.streamforge.infrastructure.s3.service.impl;
 
-import com.stream_forge.streamforge.services.encoding.service.S3Service;
+import com.stream_forge.streamforge.infrastructure.s3.service.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,8 +35,8 @@ public class S3ServiceImpl implements S3Service {
         log.info("Download completed");
     }
 
-    // It uploads an entire encoded video folder (HLS output) to S3 while preserving folder structure.
-    // prefix -> S3 folder path
+    // Uploads an entire encoded video folder (HLS output) to S3 while preserving folder structure.
+    // prefix -> S3 folder path e.g. "encoded/<videoId>/"
     @Override
     public void uploadDirectory(File rootDir, String prefix) {
         uploadRecursive(rootDir, rootDir, prefix);
@@ -44,7 +44,6 @@ public class S3ServiceImpl implements S3Service {
 
     /**
      * Uploads a single file to S3 at the given key with the given content type.
-     * Used for one-off uploads like thumbnails where a full directory walk is not needed.
      */
     @Override
     public void uploadFile(File file, String s3Key, String contentType) {
@@ -75,9 +74,15 @@ public class S3ServiceImpl implements S3Service {
 
         String key = prefix + relative;
 
+        // HLS output contains two types of files:
+        // - .m3u8 → playlist file (tells the player what segments to load and in what order)
+        // - .ts   → actual video segment (3 seconds of video data)
+        // S3 stores the Content-Type and sends it back when the browser requests the file.
+        // The HLS player uses it to know how to handle each file.
+        // If we don't set the correct type, some browsers will refuse to play the video.
         String contentType = file.getName().endsWith(".m3u8")
-                ? "application/x-mpegURL"
-                : "video/MP2T";
+                ? "application/x-mpegURL"   // playlist file
+                : "video/MP2T";             // video segment
 
         s3Client.putObject(
                 PutObjectRequest.builder()
@@ -90,5 +95,4 @@ public class S3ServiceImpl implements S3Service {
 
         log.debug("Uploaded {}", key);
     }
-
 }
