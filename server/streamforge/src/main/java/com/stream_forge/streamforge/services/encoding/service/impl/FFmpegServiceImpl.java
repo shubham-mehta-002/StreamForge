@@ -107,6 +107,8 @@ public class FFmpegServiceImpl implements FFmpegService {
                 "-crf",      "23",
                 "-maxrate",  profile.maxRateKbps() + "k",
                 "-bufsize",  profile.bufferSizeKbps() + "k",
+                "-threads",  "2",    // cap thread count — x264 pre-allocates per-thread frame buffers;
+                "-refs",     "1",    // unbound threads on a large source (e.g. 1080p MJPEG) causes OOM
                 "-c:a",      "aac",
                 "-b:a",      "128k",
                 "-hls_time", "3",
@@ -116,64 +118,19 @@ public class FFmpegServiceImpl implements FFmpegService {
                 playlist.toString()
         );
 
-        ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.redirectErrorStream(true);
-        pb.inheritIO();
-
-        Process process = pb.start();
-        String logs = new String(process.getInputStream().readAllBytes());
-        int exit = process.waitFor();
-
-        if (exit != 0) {
-            throw new VideoProbeException("FFmpeg HLS encoding failed:\n" + logs);
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Thumbnail extraction
-    // ─────────────────────────────────────────────────────────────────────
-
-    /**
-     * Extracts a single JPEG frame from the video at the given timestamp.
-     *
-     * Key flags:
-     *   -ss <seconds>    seek to timestamp BEFORE opening input (fast seek)
-     *   -vframes 1       extract exactly one frame
-     *   -vf scale=1280:-1  scale to 1280px wide, height auto-calculated
-     *                    to preserve aspect ratio (-1 = auto)
-     *   -q:v 2           JPEG quality (1-31, lower = better; 2 ≈ near-lossless)
-     *   -y               overwrite output file without asking
-     *
-     * If atSeconds exceeds the video duration, FFmpeg will seek to the last
-     * available frame rather than failing.
-     *
-     * @param input      path to the local raw video file
-     * @param outputPath path where the JPEG thumbnail will be written
-     * @param atSeconds  timestamp in seconds to extract the frame from
-     * @throws Exception if FFmpeg exits with a non-zero code
-     */
-    @Override
-    public void generateThumbnail(Path input, Path outputPath, long atSeconds) throws Exception {
-        List<String> cmd = List.of(
-                ffmpegPath,
-                "-ss",       String.valueOf(atSeconds),
-                "-i",        input.toString(),
-                "-vframes",  "1",
-                "-vf",       "scale=1280:-1",
-                "-q:v",      "2",
-                "-y",
-                outputPath.toString()
-        );
+        Path logFile = outputDir.resolve("ffmpeg_encode.log");
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectErrorStream(true);
+        pb.redirectOutput(logFile.toFile());  // write to file — avoids pipe-buffer deadlock
 
         Process process = pb.start();
-        String logs = new String(process.getInputStream().readAllBytes());
         int exit = process.waitFor();
 
+        String logs = Files.exists(logFile) ? Files.readString(logFile) : "(no output)";
+
         if (exit != 0) {
-            throw new VideoProbeException("FFmpeg thumbnail extraction failed:\n" + logs);
+            throw new VideoProbeException("FFmpeg HLS encoding failed (exit=" + exit + "):\n" + logs);
         }
     }
 }

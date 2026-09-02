@@ -2,19 +2,16 @@ package com.stream_forge.streamforge.services.encoding.util;
 
 
 import com.stream_forge.streamforge.services.encoding.model.VideoJobContext;
-import com.stream_forge.streamforge.infrastructure.kakfa.event.VideoUploadedEvent;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
 import java.util.UUID;
 
-@Service
+// Not a @Service — registered manually as a @Bean in EncodingConfig so that
+// the encoding.temp-dir property can be passed in via constructor (keeps the field final).
 @Slf4j
 public class JobContextFactory {
 
-    @Value("${encoding.temp-dir}")
     private final String tempDir;
 
     public JobContextFactory(String tempDir) {
