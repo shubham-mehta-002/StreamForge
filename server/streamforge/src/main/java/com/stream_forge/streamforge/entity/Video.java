@@ -31,8 +31,6 @@ public class Video {
 
     private String hlsMasterUrl;
 
-    private String thumbnailUrl;
-
     private String spriteUrl;
 
     @Enumerated(EnumType.STRING)
@@ -46,7 +44,7 @@ public class Video {
 
     private Integer height;
 
-    @Column(length = 1000)
+    @Column(columnDefinition = "TEXT")
     private String failureReason;
 
     @Column(updatable = false)
@@ -56,6 +54,5 @@ public class Video {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    @Column(updatable = false)
     private LocalDateTime processedAt;
 }
