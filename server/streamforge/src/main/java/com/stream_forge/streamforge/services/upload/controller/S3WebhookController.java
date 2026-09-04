@@ -25,6 +25,9 @@ public class S3WebhookController {
         if (!secret.equals(webhookSecret)) {
             return ResponseEntity.status(403).build();
         }
+
+        // bucket is passed for logging and future validation (e.g. reject events from unexpected buckets).
+        // Currently only the key is used to extract videoId and trigger encoding.
         uploadProcessingService.processUploadedVideo(
                 event.getBucket(),
                 event.getKey()

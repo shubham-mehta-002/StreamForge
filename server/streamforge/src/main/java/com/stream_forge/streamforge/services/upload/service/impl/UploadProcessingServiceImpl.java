@@ -15,7 +15,6 @@ public class UploadProcessingServiceImpl implements UploadProcessingService {
     private final VideoService videoService;
     private final EncodingService encodingService;
 
-
     @Override
     public void processUploadedVideo(String bucketName,String s3Key) {
 
