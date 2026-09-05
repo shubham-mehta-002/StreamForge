@@ -1,56 +1,101 @@
 spring.application.name=streamforge
 
 
+# ─────────────────────────────────────────────────────────────────────────────
 # SERVER
+# ─────────────────────────────────────────────────────────────────────────────
+
 server.port=8080
 
+# Allow trailing slashes on all endpoints (e.g. /videos/ works same as /videos)
+spring.mvc.pathmatch.use-suffix-pattern=false
+spring.web.mvc.pathmatch.trailing-slash=true
 
-# MYSQL
-spring.datasource.url=jdbc:mysql://streamforge-db.cp8y0oowmnqb.ap-south-1.rds.amazonaws.com:3306/streamforge
-spring.datasource.username=admin
-spring.datasource.password=<password>
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MYSQL — Video metadata database
+# Create a schema named streamforge_db before starting the app.
+# ddl-auto=update lets Hibernate auto-create/alter tables on startup.
+# ─────────────────────────────────────────────────────────────────────────────
+
+spring.datasource.url=jdbc:mysql://localhost:3306/streamforge_db
+spring.datasource.username=YOUR_DB_USERNAME
+spring.datasource.password=YOUR_DB_PASSWORD
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
 
 
-# KAFKA
-#spring.kafka.bootstrap-servers=localhost:9092
-#spring.kafka.consumer.auto-offset-reset=earliest
-#spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
-#spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer
-#spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
-#spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer
-#spring.kafka.consumer.properties.spring.json.trusted.packages=*
-#spring.kafka.consumer.properties.max.poll.interval.ms=1800000
+# ─────────────────────────────────────────────────────────────────────────────
+# REDIS — Streaming URL Cache
+# Used to cache HLS master playlist URLs so repeated stream requests
+# don't hit the database every time.
+#
+# Option A: Local Redis (for local development)
+# Option B: Upstash Redis (managed cloud Redis — recommended for deployment)
+# Uncomment whichever you are using and comment out the other.
+# ─────────────────────────────────────────────────────────────────────────────
 
-## REDIS
-spring.data.redis.host=localhost
-spring.data.redis.port=6379
-spring.cache.type=redis
-redis-ttl=60
-
-#REDIS (upstash)
-# spring.data.redis.host=cheerful-louse-80119.upstash.io
+# Option A — Local Redis
+# spring.data.redis.host=localhost
 # spring.data.redis.port=6379
-# spring.data.redis.username=default
-# spring.data.redis.password=<Password>
-# spring.data.redis.ssl.enabled=true
 # spring.cache.type=redis
-# redis-ttl=60
+
+# Option B — Upstash Redis (cloud)
+spring.data.redis.host=YOUR_UPSTASH_REDIS_HOST         # e.g. cheerful-louse-80119.upstash.io
+spring.data.redis.port=6379
+spring.data.redis.username=default
+spring.data.redis.password=YOUR_UPSTASH_REDIS_PASSWORD
+spring.data.redis.ssl.enabled=true                     # Upstash requires SSL
+spring.cache.type=redis
+
+# How long (in seconds) to cache the HLS master URL in Redis.
+# HLS master URL never changes once a video is READY, so a long TTL is safe.
+# 3600 = 1 hour
+redis-ttl=3600
 
 
-# AWS S3
-aws.bucket-name=streamforge-videos
-aws.region=eu-north-1
-aws.access-key=YOUR_ACCESS_KEY
-aws.secret-key=YOUR_SECRET_KEY
+# ─────────────────────────────────────────────────────────────────────────────
+# AWS S3 — Storage for raw uploads and encoded HLS output
+#
+# bucket-name       : the S3 bucket where everything is stored
+# region            : must exactly match the bucket's actual AWS region.
+#                     A mismatch causes a 307 redirect → CORS headers are lost → playback fails.
+# access-key        : AWS IAM access key (use a least-privilege IAM user)
+# secret-key        : AWS IAM secret key
+# presigned-hls-playlist-url-expiry : expiry in minutes for presigned HLS URLs (not currently used)
+# lambda-webhook-secret : shared secret between your Lambda function and this server.
+#                         Lambda sends this in the X-Webhook-Secret header.
+#                         The server rejects requests that don't match.
+# ─────────────────────────────────────────────────────────────────────────────
+
+aws.bucket-name=YOUR_S3_BUCKET_NAME
+aws.region=YOUR_AWS_REGION                  # e.g. ap-south-1, us-east-1
+aws.access-key=YOUR_AWS_ACCESS_KEY
+aws.secret-key=YOUR_AWS_SECRET_KEY
 aws.presigned-hls-playlist-url-expiry=10
-aws.lambda-webhook-secret=YOUR_SECRET
+aws.lambda-webhook-secret=YOUR_WEBHOOK_SECRET
 
 
-# FFmpeg
-ffmpeg.path=C:/Users/Shubham/ffmpeg/bin/ffmpeg.exe
-ffprobe.path=C:/Users/Shubham/ffmpeg/bin/ffprobe.exe
-encoding.temp-dir=C:/Users/Shubham/Desktop/temp
+# ─────────────────────────────────────────────────────────────────────────────
+# FFmpeg — Video encoding
+#
+# ffmpeg.path  : absolute path to the ffmpeg binary on this machine
+# ffprobe.path : absolute path to the ffprobe binary (ships with ffmpeg)
+# temp-dir     : directory where raw video and encoded output are stored
+#                during encoding. Cleaned up automatically after each job.
+#
+# Download FFmpeg: https://ffmpeg.org/download.html
+# On Linux/Mac you can also install via: brew install ffmpeg / apt install ffmpeg
+# ─────────────────────────────────────────────────────────────────────────────
 
+# Windows example:
+ffmpeg.path=C:/path/to/ffmpeg/bin/ffmpeg.exe
+ffprobe.path=C:/path/to/ffmpeg/bin/ffprobe.exe
+
+# Linux / Mac example:
+# ffmpeg.path=/usr/bin/ffmpeg
+# ffprobe.path=/usr/bin/ffprobe
+
+# Temp directory for encoding jobs (must have enough disk space for raw + encoded video)
+encoding.temp-dir=C:/path/to/temp/directory
 

@@ -34,12 +34,12 @@ public class GlobalExceptionHandler {
                 .body(ex.getMessage());
     }
 
-
     @ExceptionHandler(EncodingException.class)
     public ResponseEntity<String> handleEncodingException(EncodingException ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ex.getMessage());
     }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationErrors(
             MethodArgumentNotValidException ex) {

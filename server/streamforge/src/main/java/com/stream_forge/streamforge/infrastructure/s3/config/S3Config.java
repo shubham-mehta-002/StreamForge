@@ -23,11 +23,7 @@ public class S3Config {
 
     /**
      * S3Client used for API operations: CreateMultipartUpload,
-     * CompleteMultipartUpload, AbortMultipartUpload, GetObject, PutObject.
-     *
-     * The region here must exactly match the bucket's actual region.
-     * A mismatch causes a 307 redirect to the correct region — the browser
-     * follows this redirect but loses CORS response headers, breaking playback.
+     * CompleteMultipartUpload, AbortMultipartUpload, GetObject, PutObject
      */
     @Bean
     public S3Client s3Client() {

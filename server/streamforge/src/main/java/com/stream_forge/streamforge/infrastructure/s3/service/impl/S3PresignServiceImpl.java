@@ -32,9 +32,6 @@ public class S3PresignServiceImpl implements S3PresignService {
     @Value("${aws.bucket-name}")
     private String bucketName;
 
-    @Value("${aws.presigned-hls-playlist-url-expiry}")
-    private long presignedHlsPlaylistUrlExpiry;
-
     // ─────────────────────────────────────────────────────────────────────
     // Legacy single-part presigned PUT URL (kept for small files / testing)
     // ─────────────────────────────────────────────────────────────────────
