@@ -1,6 +1,6 @@
 package com.stream_forge.streamforge.services.video.service.impl;
 
-import com.stream_forge.streamforge.entity.VideoUpdateRequest;
+import com.stream_forge.streamforge.services.video.dto.request.VideoUpdateRequest;
 import com.stream_forge.streamforge.services.video.dto.request.InitUploadRequest;
 import com.stream_forge.streamforge.services.video.dto.request.MultipartAbortRequest;
 import com.stream_forge.streamforge.services.video.dto.request.MultipartCompleteRequest;
@@ -173,17 +173,17 @@ public class VideoServiceImpl implements VideoService {
     public void updateVideoDetails(String videoId, VideoUpdateRequest request) {
         Video video = getVideoById(videoId);
 
-        if (request.status() != null)           video.setStatus(request.status());
-        if (request.originalFileName() != null) video.setOriginalFileName(request.originalFileName());
-        if (request.hlsMasterUrl() != null)     video.setHlsMasterUrl(request.hlsMasterUrl());
-        if (request.s3OriginalKey() != null)    video.setS3OriginalKey(request.s3OriginalKey());
-        if (request.thumbnailUrl() != null)     video.setThumbnailUrl(request.thumbnailUrl());
-        if (request.spriteUrl() != null)        video.setSpriteUrl(request.spriteUrl());
-        if (request.duration() != null)         video.setDuration(request.duration());
-        if (request.width() != null)            video.setWidth(request.width());
-        if (request.height() != null)           video.setHeight(request.height());
-        if (request.fileSize() != null)         video.setFileSize(request.fileSize());
-        if (request.processedAt() != null)      video.setProcessedAt(request.processedAt());
+        if (request.getStatus() != null)           video.setStatus(request.getStatus());
+        if (request.getOriginalFileName() != null) video.setOriginalFileName(request.getOriginalFileName());
+        if (request.getHlsMasterUrl() != null)     video.setHlsMasterUrl(request.getHlsMasterUrl());
+        if (request.getS3OriginalKey() != null)    video.setS3OriginalKey(request.getS3OriginalKey());
+        if (request.getSpriteUrl() != null)        video.setSpriteUrl(request.getSpriteUrl());
+        if (request.getDuration() != null)         video.setDuration(request.getDuration());
+        if (request.getWidth() != null)            video.setWidth(request.getWidth());
+        if (request.getHeight() != null)           video.setHeight(request.getHeight());
+        if (request.getFileSize() != null)         video.setFileSize(request.getFileSize());
+        if (request.getProcessedAt() != null)      video.setProcessedAt(request.getProcessedAt());
+        if (request.getFailureReason() != null)    video.setFailureReason(request.getFailureReason());
 
         videoRepository.save(video);
     }
@@ -196,14 +196,12 @@ public class VideoServiceImpl implements VideoService {
 
     @Override
     public List<VideoSummaryResponse> getAllVideos() {
-        return videoRepository.findAll()
+        return videoRepository.findByStatus(VideoStatus.READY)
                 .stream()
-                .filter(video -> video.getStatus().equals(VideoStatus.READY))
                 .map(video -> new VideoSummaryResponse(
                         video.getId(),
                         video.getOriginalFileName(),
-                        video.getHlsMasterUrl(),
-                        video.getThumbnailUrl()   // may be null if thumbnail generation failed
+                        video.getHlsMasterUrl()
                 ))
                 .toList();
     }

@@ -2,7 +2,7 @@ package com.stream_forge.streamforge.services.video.service;
 
 import com.stream_forge.streamforge.entity.Video;
 import com.stream_forge.streamforge.entity.VideoStatus;
-import com.stream_forge.streamforge.entity.VideoUpdateRequest;
+import com.stream_forge.streamforge.services.video.dto.request.VideoUpdateRequest;
 import com.stream_forge.streamforge.services.video.dto.request.InitUploadRequest;
 import com.stream_forge.streamforge.services.video.dto.request.MultipartAbortRequest;
 import com.stream_forge.streamforge.services.video.dto.request.MultipartCompleteRequest;
