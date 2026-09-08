@@ -1,20 +1,20 @@
-import axios from "axios";
+import axios from 'axios';
 
 /**
- * Shared Axios instance pre-configured with the backend base URL.
+ * Shared axios instance for all backend API calls.
  *
- * Uses NEXT_PUBLIC_API_BASE_URL to match the env var defined in .env.local.
- * All backend API calls should use this instance so the base URL and
- * default headers are applied consistently.
+ * Base URL is read from NEXT_PUBLIC_API_BASE_URL so it works across
+ * local dev (localhost), staging (ngrok), and production without code changes.
  *
- * Note: Direct S3 upload calls (PUT to presigned URLs) must use plain axios,
- * NOT this instance — they go to S3, not the backend, and must not carry
- * the ngrok or other backend-specific headers.
+ * ⚠️  Do NOT use this instance for direct S3 PUT calls (presigned URLs).
+ *     Those go to S3, not the backend, and must use plain axios so they don't
+ *     carry backend-specific headers that would break the S3 signature check.
  */
 export const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/videos",
+    baseURL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080/videos',
     headers: {
-        // Prevents ngrok from showing the browser warning page in dev tunnels
-        "ngrok-skip-browser-warning": "true",
+        // Bypasses the ngrok browser-warning interstitial page, which otherwise
+        // strips CORS headers before they reach the client.
+        'ngrok-skip-browser-warning': 'true',
     },
 });
