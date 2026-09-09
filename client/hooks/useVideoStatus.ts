@@ -1,111 +1,65 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { getVideoStatus, getStreamingUrl } from '@/services/api';
+import type { VideoStatus } from '@/types/video';
 
-/** How often to poll while the video is still processing (milliseconds) */
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 5_000;
 
-/**
- * useVideoStatus — polls the video processing status every 3 seconds.
- *
- * Polling stops automatically once a terminal state is reached
- * (READY or FAILED) so we don't hammer the API indefinitely.
- *
- * On READY: fetches the HLS streaming URL and fires a success toast.
- * On FAILED: fires an error toast and stops polling.
- * Manual refresh is still available via the returned fetchStatus function.
- */
 export function useVideoStatus(videoId: string) {
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<VideoStatus | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Prevents duplicate "ready" handling if multiple polls fire close together
-  const processedReady = useRef(false);
-
-  // Holds the interval ID so we can clear it when polling should stop
+  // What it stores: the ID returned by setInterval, so you can cancel it later with clearInterval.
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /** Clears the polling interval if one is running */
-  const stopPolling = useCallback(() => {
+  // What it stores: a boolean flag — "have we already handled the READY state?"
+  // Why it's needed:
+  // The polling calls fetchStatus every 5 seconds.Without this guard, if the server returns READY on multiple consecutive polls before stopPolling fully takes effect, this block would run more than once:
+  const readyHandledRef = useRef(false);
+
+  const stopPolling = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-  }, []);
+  };
 
-  /**
-   * Called once when status transitions to READY.
-   * Fetches the HLS URL and fires a success toast — runs only once
-   * thanks to the processedReady guard.
-   */
-  const handleVideoReady = useCallback(async () => {
-    if (processedReady.current) return;
-    processedReady.current = true;
-
-    try {
-      const streamData = await getStreamingUrl(videoId);
-      setStreamUrl(streamData.streamingUrl);
-      toast.success('Your video is processed and ready to stream!');
-    } catch (err: any) {
-      setError('Video is ready but failed to fetch streaming URL.');
-      toast.error('Failed to load streaming URL.');
-    }
-  }, [videoId]);
-
-  /**
-   * Fetches the current status from the API.
-   * Used both by the auto-poll interval and the manual refresh button.
-   */
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = async () => {
     setIsRefreshing(true);
-    setError(null);
-
     try {
-      const data = await getVideoStatus(videoId);
-      setStatus(data.status);
+      const { status: nextStatus } = await getVideoStatus(videoId);
+      setStatus(nextStatus);
+      setError(null);
 
-      if (data.status === 'READY') {
-        // Terminal state — stop polling and load the stream URL
+      if (nextStatus === 'READY') {
         stopPolling();
-        await handleVideoReady();
-      } else if (data.status === 'FAILED') {
-        // Terminal state — stop polling and notify
-        stopPolling();
-        toast.error('Video processing failed.');
+        if (!readyHandledRef.current) {
+          readyHandledRef.current = true;
+          const { streamingUrl } = await getStreamingUrl(videoId);
+          setStreamUrl(streamingUrl);
+          toast.success('Your video is ready to stream!');
+        }
+        return;
       }
-      // Any other status (REQUESTED, PROCESSING) — polling continues
-    } catch (err: any) {
-      setError('Failed to fetch video status');
-      // Don't stop polling on a transient network error —
-      // the next tick will retry automatically
+
+      if (nextStatus === 'FAILED') {
+        stopPolling();
+        toast.error('Video processing failed. Please try uploading again.');
+      }
+    } catch {
+      setError('Could not fetch video status. Retrying…');
     } finally {
       setIsRefreshing(false);
     }
-  }, [videoId, stopPolling, handleVideoReady]);
+  };
 
   useEffect(() => {
-    // Fetch immediately on mount so the user sees a status right away
     fetchStatus();
+    intervalRef.current = setInterval(fetchStatus, POLL_INTERVAL_MS);
+    return stopPolling;
+  }, [videoId]);
 
-    // Then poll every POLL_INTERVAL_MS until a terminal state is reached
-    intervalRef.current = setInterval(() => {
-      fetchStatus();
-    }, POLL_INTERVAL_MS);
-
-    // Cleanup: clear the interval when the component unmounts
-    return () => {
-      stopPolling();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId]); // Re-run only if videoId changes (new upload)
-
-  return {
-    status,
-    streamUrl,
-    isRefreshing,
-    error,
-    fetchStatus, // still exposed for the manual refresh button
-  };
+  return { status, streamUrl, isRefreshing, error, fetchStatus };
 }
