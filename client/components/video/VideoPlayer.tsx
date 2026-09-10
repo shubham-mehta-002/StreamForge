@@ -1,20 +1,15 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { AlertCircle } from 'lucide-react';
 
 interface VideoPlayerProps {
   url: string;
   title?: string;
-  /**
-   * Optional poster image shown in the video element before playback starts.
-   * Pass the thumbnail URL here. If null/undefined, the browser shows a blank frame.
-   */
-  poster?: string | null;
 }
 
-export function VideoPlayer({ url, title, poster }: VideoPlayerProps) {
+export function VideoPlayer({ url, title }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,65 +17,61 @@ export function VideoPlayer({ url, title, poster }: VideoPlayerProps) {
     const video = videoRef.current;
     if (!video) return;
 
-    // Reset error state when the URL changes (new video loaded)
     setError(null);
 
-    let hls: Hls | null = null;
-
     if (Hls.isSupported()) {
-      hls = new Hls({
-        debug: false,
-        enableWorker: true,
-      });
+      const hls = new Hls({ enableWorker: true, startLevel: -1 });
+      let networkRetries = 0;
 
       hls.loadSource(url);
       hls.attachMedia(video);
 
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        console.error('HLS Error:', data);
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              // Attempt to recover from transient network errors automatically
-              setError('Network error: failed to load the video. Check S3 CORS settings.');
-              hls?.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              setError('Media error: the video stream is corrupted or unplayable.');
-              hls?.recoverMediaError();
-              break;
-            default:
-              setError('An unknown error occurred while playing the video.');
-              hls?.destroy();
-              break;
-          }
-        }
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => { });
       });
 
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari has native HLS support — no hls.js needed
-      video.src = url;
-      video.addEventListener('error', () => {
-        setError('Error loading video natively.');
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (!data.fatal) return;
+
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && ++networkRetries <= 3) {
+          hls.startLoad();
+          return;
+        }
+
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          hls.recoverMediaError();
+        } else {
+          hls.destroy();
+        }
+
+        setError(
+          data.type === Hls.ErrorTypes.NETWORK_ERROR
+            ? 'Network error — failed to load video. Check your connection.'
+            : 'Error playing the video. The stream may be corrupted.'
+        );
       });
-    } else {
-      setError('HLS is not supported in this browser.');
+
+      return () => hls.destroy();
     }
 
-    return () => {
-      if (hls) hls.destroy();
-    };
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.play().catch(() => { });
+      const onError = () => setError('Error loading video.');
+      video.addEventListener('error', onError);
+      return () => video.removeEventListener('error', onError);
+    }
+
+    setError('HLS playback is not supported in this browser.');
   }, [url]);
 
   return (
     <div className="w-full overflow-hidden rounded-xl shadow-lg border border-border/50 bg-black group relative">
-      <div className="aspect-video relative bg-black flex items-center justify-center">
-
+      <div className="aspect-video relative">
         {error && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80 text-white p-6 text-center space-y-2">
             <AlertCircle className="w-8 h-8 text-destructive" />
             <p className="font-medium">{error}</p>
-            <p className="text-xs opacity-75">Check browser console for more details.</p>
           </div>
         )}
 
@@ -90,18 +81,15 @@ export function VideoPlayer({ url, title, poster }: VideoPlayerProps) {
           controls
           crossOrigin="anonymous"
           playsInline
-          // poster shows the thumbnail image before the user presses play.
-          // undefined is passed when no thumbnail is available so the browser
-          // falls back to its default blank-frame behaviour.
-          poster={poster ?? undefined}
+          muted
         />
-      </div>
 
-      {title && (
-        <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
-          <h3 className="text-white font-medium text-lg truncate">{title}</h3>
-        </div>
-      )}
+        {title && (
+          <div className="absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20">
+            <h3 className="text-white font-medium text-lg truncate">{title}</h3>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
