@@ -173,3 +173,11 @@ CORS is open (`*`) and there is no auth layer. Any client can upload, poll, or s
 
 ### Client-side only CORS for HLS
 The S3 bucket must be configured with a CORS policy allowing GET requests from the frontend origin. There is no server-side proxy for HLS segment delivery — segments are fetched directly from S3 by the browser.
+
+
+
+
+
+https://github.com/user-attachments/assets/a49df7ce-84e6-4eff-9157-da3cb1fd818f
+
+
